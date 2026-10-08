@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PantryChef</title>
+<!-- Optional: used only to draw A2UI Icon components. If it can't load (offline/
+     corp network), icons fall back to showing their name as text. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined">
+<style>
+  :root { --accent:#e65100; --accent-hover:#f57c00; --bg:#fffaf5; --border:#ffe0b2; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); display:flex; flex-direction:column; height:100vh; }
+  header { background:var(--accent); color:#fff; padding:.9rem 1.2rem; font-weight:700; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  #log { flex:1; overflow-y:auto; padding:1.2rem; max-width:98%; width:98%; margin:0 auto; }
+  .msg { margin:.6rem 0; width:100%; }
+  .msg.user { text-align:right; }
+  .msg.agent { text-align:left; width:100%; }
+  .bubble { display:inline-block; padding:.6rem .9rem; border-radius:12px; background:#fff; border:1px solid var(--border); text-align:left; max-width:90%; white-space:pre-wrap; }
+  .msg.user .bubble { background:var(--accent); color:#fff; border:none; }
+  /* When the reply is an A2UI card, drop the bubble chrome and fill full horizontal width */
+  .bubble.rich { background:transparent; border:none; padding:0; width:100% !important; max-width:100% !important; white-space:normal; display:block !important; }
+  form { display:flex; gap:.5rem; padding:1rem; border-top:1px solid var(--border); background:#fff; max-width:98%; width:98%; margin:0 auto; }
+  input { flex:1; padding:.7rem; border:1px solid var(--border); border-radius:8px; font-size:1rem; }
+  button { padding:.7rem 1.1rem; border:none; border-radius:8px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; transition: background 0.2s; }
+  button:hover { background:var(--accent-hover); }
+
+  /* --- Multi-card: Strict 3-column Horizontal Row (side by side, all on screen) --- */
+  .a2grid { display:flex !important; flex-direction:row !important; gap: 1rem !important; width:100% !important; align-items:stretch !important; justify-content:space-between !important; }
+  .a2grid > .a2card { flex: 1 1 calc(33.333% - 0.7rem) !important; max-width: calc(33.333% - 0.7rem) !important; box-sizing: border-box !important; }
+
+  /* --- Compact A2UI Card styles --- */
+  .a2card { border:1px solid #ffd8a8; border-radius:12px; padding:.75rem .9rem; background:#fff; box-shadow:0 3px 8px rgba(230,81,0,0.06); width:100%; margin-bottom: 0; display:flex; flex-direction:column; justify-content:space-between; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+  .a2card:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(230,81,0,0.12); }
+  .a2col { display:flex; flex-direction:column; gap:.35rem; flex:1; height:100%; }
+  .a2row { display:flex; flex-direction:row; gap:.35rem; align-items:center; flex-wrap:wrap; }
+  .a2row.between { justify-content:space-between; }
+  
+  .a2text { margin:0; line-height:1.25; color:#2c3e50; }
+  .a2text.a2-h1 { font-size:1.25rem; font-weight:800; color:#d84315; }
+  .a2text.a2-h2 { font-size:1.05rem; font-weight:800; color:#e65100; margin-top:.1rem; }
+  .a2text.a2-h3 { font-size:.95rem; font-weight:700; color:#bf360c; }
+  .a2text.a2-h4 { font-size:.82rem; font-weight:700; color:#5d4037; margin-top:.2rem; text-transform: uppercase; letter-spacing:0.03em; }
+  .a2text.a2-caption { font-size:.76rem; color:#6d4c41; }
+  
+  /* Compact Metric Chips */
+  .metric-chip { display:inline-flex; align-items:center; background:#fff3e0; color:#e65100; font-size:.72rem; font-weight:600; padding:.15rem .45rem; border-radius:5px; border:1px solid #ffe0b2; margin-right:.25rem; margin-bottom:.2rem; }
+  .metric-badge-box { background:#fbe9e7; border-left:3px solid #ff7043; padding:.3rem .6rem; border-radius:0 5px 5px 0; margin:.15rem 0; font-size:.75rem; line-height:1.25; }
+  
+  /* Filter Match & Allergen Highlight Badges (High-Contrast Purple) */
+  .tag-badge { display:inline-flex; align-items:center; font-size:.73rem; font-weight:750; padding:.2rem .5rem; border-radius:6px; margin-right:.3rem; margin-bottom:.25rem; letter-spacing:0.02em; }
+  .tag-diet-highlight { background:#f3e5f5; color:#6a1b9a; border:1.5px solid #ba68c8; box-shadow:0 1px 3px rgba(106,27,154,0.12); }
+  .tag-allergen-warning { background:#4a148c; color:#ffffff; border:1.5px solid #311b92; box-shadow:0 2px 5px rgba(74,20,140,0.25); font-weight:800; }
+  .tag-vibe-highlight { background:#ede7f6; color:#512da8; border:1px solid #d1c4e9; }
+  .tag-time-highlight { background:#e0f7fa; color:#006064; border:1px solid #b2ebf2; }
+  .card-highlights-row { display:flex; flex-wrap:wrap; gap:.3rem; margin:.3rem 0; align-items:center; }
+
+  /* Expandable / Collapsible recipe section */
+  details.recipe-details { background:#fafafa; border:1px solid #eee; border-radius:6px; padding:.35rem .6rem; margin-top:.3rem; font-size:.78rem; }
+  details.recipe-details summary { font-weight:700; color:var(--accent); cursor:pointer; user-select:none; outline:none; }
+  details.recipe-details summary:hover { text-decoration:underline; }
+  .instructions-box { background:#fff; border:1px solid #eee; border-radius:6px; padding:.5rem .7rem; margin-top:.3rem; font-size:.78rem; line-height:1.4; white-space:pre-line; max-height:180px; overflow-y:auto; }
+  .ingredients-box { background:#fff; border:1px dashed #ffd8a8; border-radius:6px; padding:.5rem .7rem; margin-top:.25rem; font-size:.78rem; line-height:1.35; white-space:pre-line; }
+
+  .a2divider { border:none; border-top:1px solid #ffe0b2; margin:.3rem 0; width:100%; }
+  .a2img { max-width:100%; border-radius:8px; display:block; object-fit:cover; width:100%; aspect-ratio: 16 / 10; box-shadow:0 1px 4px rgba(0,0,0,0.06); margin-bottom:.2rem; }
+  /* --- Filter Toolbar (Fresh Herb Green Accent) --- */
+  #filters-bar { background:#f9fdfa; border-bottom:1px solid #c8e6c9; padding:.65rem 1.2rem; display:flex; flex-wrap:wrap; gap:.65rem; align-items:center; }
+  .filter-group { display:flex; align-items:center; gap:.3rem; }
+  .filter-group label { font-size:.78rem; font-weight:700; color:#2e7d32; text-transform:uppercase; letter-spacing:0.02em; }
+  select.filter-select { padding:.38rem .65rem; border:1px solid #a5d6a7; border-radius:6px; background:#fff; font-size:.82rem; color:#1b5e20; font-weight:500; cursor:pointer; outline:none; transition: all 0.2s; }
+  select.filter-select:focus { border-color:#2e7d32; box-shadow:0 0 0 2px rgba(46,125,50,0.15); }
+  select.filter-select.active { border-color:#2e7d32; background:#e8f5e9; color:#1b5e20; font-weight:700; }
+  .clear-btn { padding:.35rem .7rem; background:#fff; border:1px solid #a5d6a7; color:#2e7d32; border-radius:6px; font-size:.78rem; cursor:pointer; font-weight:600; transition: background 0.2s; }
+  .clear-btn:hover { background:#e8f5e9; }
+</style>
+</head>
+<body>
+<header>🍲 PantryChef</header>
+<div id="filters-bar">
+  <div class="filter-group">
+    <label>Diet:</label>
+    <select id="filter-diet" class="filter-select">
+      <option value="">Any</option>
+      <option value="Vegetarian">Vegetarian</option>
+      <option value="Vegan">Vegan</option>
+      <option value="Pescatarian">Pescatarian</option>
+      <option value="Keto">Keto</option>
+      <option value="Paleo">Paleo</option>
+      <option value="Gluten-Free">Gluten-Free</option>
+      <option value="Dairy-Free">Dairy-Free</option>
+      <option value="Low-Carb">Low-Carb</option>
+      <option value="Low-Sodium">Low-Sodium</option>
+      <option value="High-Protein">High-Protein</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Allergy / Avoid:</label>
+    <select id="filter-allergy" class="filter-select">
+      <option value="">None</option>
+      <option value="Nuts-free (No Nuts)">Nuts</option>
+      <option value="Peanuts-free (No Peanuts)">Peanuts</option>
+      <option value="Dairy-free (No Dairy)">Dairy</option>
+      <option value="Eggs-free (No Eggs)">Eggs</option>
+      <option value="Shellfish-free (No Shellfish)">Shellfish</option>
+      <option value="Fish-free (No Fish)">Fish</option>
+      <option value="Soy-free (No Soy)">Soy</option>
+      <option value="Wheat-free (No Wheat)">Wheat</option>
+      <option value="Sesame-free (No Sesame)">Sesame</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Time:</label>
+    <select id="filter-time" class="filter-select">
+      <option value="">Any</option>
+      <option value="Under 15 minutes">Under 15 min</option>
+      <option value="Under 30 minutes">Under 30 min</option>
+      <option value="Under 1 hour">Under 1 hour</option>
+      <option value="Slow cooker">Slow cooker</option>
+      <option value="Meal prep friendly">Meal prep friendly</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Difficulty:</label>
+    <select id="filter-difficulty" class="filter-select">
+      <option value="">Any</option>
+      <option value="Beginner">Beginner</option>
+      <option value="Intermediate">Intermediate</option>
+      <option value="Advanced">Advanced</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Meal Type:</label>
+    <select id="filter-meal" class="filter-select">
+      <option value="">Any</option>
+      <option value="Breakfast">Breakfast</option>
+      <option value="Lunch">Lunch</option>
+      <option value="Dinner">Dinner</option>
+      <option value="Snack">Snack</option>
+      <option value="Dessert">Dessert</option>
+      <option value="Appetizer">Appetizer</option>
+      <option value="Side Dish">Side Dish</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Cuisine:</label>
+    <select id="filter-cuisine" class="filter-select">
+      <option value="">Any</option>
+      <option value="Italian">Italian</option>
+      <option value="Mexican">Mexican</option>
+      <option value="American">American</option>
+      <option value="Chinese">Chinese</option>
+      <option value="Japanese">Japanese</option>
+      <option value="Thai">Thai</option>
+      <option value="Indian">Indian</option>
+      <option value="Mediterranean">Mediterranean</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Vibe / Fun:</label>
+    <select id="filter-fun" class="filter-select">
+      <option value="">Any</option>
+      <option value="Comfort Food">Comfort Food</option>
+      <option value="Date Night">Date Night</option>
+      <option value="Healthy">Healthy</option>
+      <option value="Post-Workout">Post-Workout</option>
+      <option value="Camping">Camping</option>
+      <option value="Game Day">Game Day</option>
+      <option value="Holiday">Holiday</option>
+      <option value="Outdoor BBQ">Outdoor BBQ</option>
+    </select>
+  </div>
+  <button type="button" class="clear-btn" id="clear-filters">Reset Filters</button>
+</div>
+<div id="log"></div>
+<form id="form">
+  <input id="input" placeholder="Ingredients you have or dish idea (e.g., chicken, spinach, garlic)..." autocomplete="off" autofocus>
+  <button>Find Recipes</button>
+</form>
+
+<script>
+const log = document.getElementById("log");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+const filterSelects = document.querySelectorAll(".filter-select");
+const clearFiltersBtn = document.getElementById("clear-filters");
+
+filterSelects.forEach(sel => {
+  sel.addEventListener("change", () => {
+    if (sel.value) sel.classList.add("active");
+    else sel.classList.remove("active");
+  });
+});
+
+clearFiltersBtn.addEventListener("click", () => {
+  filterSelects.forEach(sel => {
+    sel.value = "";
+    sel.classList.remove("active");
+  });
+});
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+function bubble(who) {
+  const m = el("div", "msg " + who);
+  const b = el("div", "bubble");
+  m.appendChild(b); log.appendChild(m); log.scrollTop = log.scrollHeight;
+  return b;
+}
+
+/* ----------------------------------------------------------------------------
+ * A2UI mini-renderer (v0.8 Basic Catalog subset).
+ * Renders Card / Column / Row / Text / Divider / List / Image / Icon.
+ * Anything else falls back to plain text (see renderReply). All text goes in via
+ * textContent and image URLs are validated, so agent output can't inject HTML.
+ * -------------------------------------------------------------------------- */
+
+// A "bound value" is usually {literalString: "..."}; we only support literals.
+function boundStr(v) {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v.literalString === "string") return v.literalString;
+  return "";
+}
+
+// child ids of a component's props: single `child` and/or `children.explicitList`.
+function childIds(props) {
+  const ids = [];
+  if (props && typeof props.child === "string") ids.push(props.child);
+  const ch = props && props.children;
+  if (ch && Array.isArray(ch.explicitList)) for (const c of ch.explicitList) if (typeof c === "string") ids.push(c);
+  return ids;
+}
+
+// A2UI icon names are camelCase (locationOn); Material Symbols wants snake_case.
+function iconName(n) { return String(n || "").replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/\s+/g, "_").toLowerCase(); }
+
+function buildNode(id, comps, seen) {
+  if (!id || seen.has(id)) return null;   // missing / cycle guard
+  seen.add(id);
+  const spec = comps[id];
+  if (!spec || typeof spec !== "object") return null;
+  const type = Object.keys(spec)[0];
+  const props = spec[type] || {};
+  const kids = () => childIds(props).map(cid => buildNode(cid, comps, seen)).filter(Boolean);
+
+  switch (type) {
+    case "Card": {
+      const d = el("div", "a2card");
+      kids().forEach(n => d.appendChild(n));
+
+      // Automatic Recipe Feature & Allergen Detection
+      const fullCardText = d.textContent.toLowerCase();
+      
+      // 1. Allergen Detection
+      const detectedAllergens = [];
+      if (/\b(peanut|peanuts|peanut butter)\b/.test(fullCardText)) detectedAllergens.push("Peanuts");
+      else if (/\b(nut|nuts|walnut|walnuts|almond|almonds|cashew|cashews|pecan|pecans|pistachio|pistachios)\b/.test(fullCardText)) detectedAllergens.push("Tree Nuts");
+      if (/\b(milk|cheese|butter|cream|dairy|parmesan|cheddar|mozzarella|yogurt|sour cream)\b/.test(fullCardText)) detectedAllergens.push("Dairy");
+      if (/\b(egg|eggs|egg whites|mayo|mayonnaise)\b/.test(fullCardText)) detectedAllergens.push("Eggs");
+      if (/\b(shrimp|prawn|prawns|crab|lobster|shellfish|clam|clams|mussel|mussels)\b/.test(fullCardText)) detectedAllergens.push("Shellfish");
+      if (/\b(fish|salmon|tuna|cod|tilapia|halibut|anchovy|anchovies)\b/.test(fullCardText)) detectedAllergens.push("Fish");
+      if (/\b(soy|soy sauce|tofu|edamame|tamari)\b/.test(fullCardText)) detectedAllergens.push("Soy");
+      if (/\b(wheat|flour|bread|pasta|gluten)\b/.test(fullCardText)) detectedAllergens.push("Wheat / Gluten");
+      if (/\b(sesame|sesame oil|tahini)\b/.test(fullCardText)) detectedAllergens.push("Sesame");
+
+      // 2. Dietary & Characteristic Highlights
+      const detectedDiets = [];
+      if (!/\b(chicken|beef|pork|meat|fish|salmon|shrimp|bacon|turkey)\b/.test(fullCardText)) {
+        if (!detectedAllergens.includes("Dairy") && !detectedAllergens.includes("Eggs")) detectedDiets.push("Vegan");
+        else detectedDiets.push("Vegetarian");
+      }
+      if (!detectedAllergens.includes("Wheat / Gluten") && !fullCardText.includes("flour") && !fullCardText.includes("bread")) {
+        detectedDiets.push("Gluten-Free");
+      }
+      if (!detectedAllergens.includes("Dairy")) {
+        detectedDiets.push("Dairy-Free");
+      }
+      if (fullCardText.includes("protein: 2") || fullCardText.includes("protein: 3") || fullCardText.includes("protein: 4") || fullCardText.includes("high-protein")) {
+        detectedDiets.push("High-Protein");
+      }
+      if (fullCardText.includes("15 min") || fullCardText.includes("10 min")) {
+        detectedDiets.push("⚡ Under 15m");
+      } else if (fullCardText.includes("20 min") || fullCardText.includes("25 min") || fullCardText.includes("30 min")) {
+        detectedDiets.push("⏱ Under 30m");
+      }
+
+      // Create highlights row if any attributes or allergens were found
+      if (detectedAllergens.length > 0 || detectedDiets.length > 0) {
+        const highlightRow = el("div", "card-highlights-row");
+        // Allergens highlighted in warning red
+        for (const allergen of detectedAllergens) {
+          const badge = el("span", "tag-badge tag-allergen-warning", `⚠️ Contains ${allergen}`);
+          highlightRow.appendChild(badge);
+        }
+        // Met dietary perks highlighted in fresh herb green
+        for (const diet of detectedDiets.slice(0, 3)) { // up to 3 top perks
+          const badge = el("span", "tag-badge tag-diet-highlight", `✓ ${diet}`);
+          highlightRow.appendChild(badge);
+        }
+
+        // Insert badges right after the cover photo or at top of card
+        const firstCol = d.querySelector(".a2col") || d;
+        const img = firstCol.querySelector(".a2img");
+        if (img && img.nextSibling) {
+          firstCol.insertBefore(highlightRow, img.nextSibling);
+        } else {
+          firstCol.insertBefore(highlightRow, firstCol.firstChild);
+        }
+      }
+
+      return d;
+    }
+    case "Column":
+    case "List": {
+      const horizontal = type === "List" && props.direction === "horizontal";
+      const d = el("div", horizontal ? "a2row" : "a2col");
+      const cids = childIds(props);
+      // Check if this Column contains multiple Cards as children (e.g. root_column containing card_1, card_2, card_3)
+      const childCardCount = cids.filter(cid => comps[cid] && comps[cid].Card).length;
+      if (childCardCount > 1) {
+        // Render non-card headers first, then wrap cards in .a2grid horizontal row!
+        let gridContainer = null;
+        for (const cid of cids) {
+          const childNode = buildNode(cid, comps, seen);
+          if (!childNode) continue;
+          if (comps[cid] && comps[cid].Card) {
+            if (!gridContainer) {
+              gridContainer = el("div", "a2grid");
+              d.appendChild(gridContainer);
+            }
+            gridContainer.appendChild(childNode);
+          } else {
+            d.appendChild(childNode);
+          }
+        }
+        return d;
+      }
+      kids().forEach(n => d.appendChild(n));
+      return d;
+    }
+    case "Row": {
+      const d = el("div", "a2row" + (props.distribution === "spaceBetween" ? " between" : ""));
+      kids().forEach(n => d.appendChild(n)); return d;
+    }
+    case "Text": {
+      const t = el("div", "a2text");
+      const hint = String(props.usageHint || "body").toLowerCase();
+      if (["h1", "h2", "h3", "h4", "h5", "h6"].includes(hint)) t.classList.add("a2-" + hint);
+      else if (hint === "caption") t.classList.add("a2-caption");
+      const rawText = boundStr(props.text);
+      
+      // 1. Stats and metrics formatting (Prep, Cook, Calories, Protein, Reheat, Ingredients)
+      if (rawText.includes("⏱") || rawText.includes("Prep:") || rawText.includes("🔥") || rawText.includes("Calories:") || rawText.includes("Reheat Score")) {
+        const chipContainer = el("div", null);
+        chipContainer.style.display = "flex";
+        chipContainer.style.flexWrap = "wrap";
+        chipContainer.style.margin = "0.3rem 0";
+
+        // Split by pipes or bullets
+        const segments = rawText.split(/[|•]/).map(s => s.trim()).filter(Boolean);
+        for (const seg of segments) {
+          const chip = el("span", "metric-chip", seg);
+          chipContainer.appendChild(chip);
+        }
+        return chipContainer;
+      }
+
+      // 2. Equipment formatting (compact)
+      if (rawText.toLowerCase().includes("equipment required:") || rawText.toLowerCase().includes("equipment:")) {
+        const box = el("div", "metric-badge-box");
+        box.textContent = rawText;
+        return box;
+      }
+
+      // Omit redundant standalone headings for ingredients/steps since dropdown handles them
+      const lower = rawText.trim().toLowerCase();
+      if (hint === "h4" && (lower.includes("ingredients") || lower.includes("step-by-step") || lower.includes("instructions"))) {
+        return null;
+      }
+
+      // 3. Step-by-step instructions (compact expandable dropdown)
+      if (/^\s*1\.\s+/m.test(rawText) || rawText.toLowerCase().startsWith("instructions:") || rawText.toLowerCase().startsWith("directions:")) {
+        const d = el("details", "recipe-details");
+        const s = el("summary", null, "📖 View Instructions");
+        const box = el("div", "instructions-box");
+        box.textContent = rawText;
+        d.appendChild(s);
+        d.appendChild(box);
+        return d;
+      }
+
+      // 4. Ingredients list (compact expandable dropdown)
+      if (/^\s*[•\-\*]\s+/m.test(rawText) || rawText.toLowerCase().startsWith("ingredients:")) {
+        const d = el("details", "recipe-details");
+        const s = el("summary", null, "🛒 View Ingredients");
+        const box = el("div", "ingredients-box");
+        box.textContent = rawText;
+        d.appendChild(s);
+        d.appendChild(box);
+        return d;
+      }
+
+      // Default with URL auto-linking
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      if (urlRegex.test(rawText)) {
+        const parts = rawText.split(urlRegex);
+        for (const p of parts) {
+          if (/^https?:\/\//i.test(p)) {
+            const a = document.createElement("a");
+            a.href = p;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.textContent = p;
+            a.style.color = "var(--accent)";
+            a.style.textDecoration = "underline";
+            t.appendChild(a);
+          } else {
+            t.appendChild(document.createTextNode(p));
+          }
+        }
+      } else {
+        t.textContent = rawText;
+      }
+      return t;
+    }
+    case "Divider":
+      return el("hr", "a2divider");
+    case "Image": {
+      const src = boundStr(props.url || props.src);
+      if (!/^https?:\/\//i.test(src)) return null;   // only allow safe URLs
+      const img = el("img", "a2img"); img.src = src; img.alt = boundStr(props.alt) || ""; return img;
+    }
+    case "Icon": {
+      const s = el("span", "material-symbols-outlined"); s.textContent = iconName(boundStr(props.name) || props.name); return s;
+    }
+    default:
+      return null;   // unknown component -> skipped (text fallback covers content)
+  }
+}
+
+// Render one or more A2UI messages (beginRendering + surfaceUpdate) into `container`.
+// Returns true if anything was drawn.
+function renderSurface(messages, container) {
+  const comps = {};
+  const roots = [];
+  for (const m of messages) {
+    if (m.beginRendering && typeof m.beginRendering.root === "string") roots.push(m.beginRendering.root);
+    const su = m.surfaceUpdate;
+    if (su && Array.isArray(su.components)) for (const c of su.components) if (c && c.id && c.component) comps[c.id] = c.component;
+  }
+  // Collect explicit roots plus any unreferenced top-level components (e.g. card_2, card_3)
+  const referenced = new Set();
+  for (const id in comps) {
+    const spec = comps[id];
+    childIds(spec[Object.keys(spec)[0]] || {}).forEach(c => referenced.add(c));
+  }
+  
+  let rootIds = roots.filter(r => comps[r]);
+  // Also append any Card components that weren't referenced by other components
+  for (const id in comps) {
+    if (!referenced.has(id) && !rootIds.includes(id)) {
+      rootIds.push(id);
+    }
+  }
+
+  let drew = false;
+  // If multiple top-level cards exist, wrap in responsive grid container
+  const targetParent = rootIds.length > 1 ? el("div", "a2grid") : container;
+  if (rootIds.length > 1) container.appendChild(targetParent);
+
+  for (const rid of rootIds) {
+    const node = buildNode(rid, comps, new Set());
+    if (node) {
+      targetParent.appendChild(node);
+      drew = true;
+    }
+  }
+  return drew;
+}
+
+// Fallback: pull every Text value out of the messages as plain text.
+function flattenText(messages) {
+  const out = [];
+  for (const m of messages) {
+    const su = m.surfaceUpdate;
+    if (su && Array.isArray(su.components)) for (const c of su.components) if (c && c.component && c.component.Text) out.push(boundStr(c.component.Text.text));
+  }
+  return out.join("\n").trim();
+}
+
+function renderReply(b, parts) {
+  b.textContent = "";   // clear the "…" placeholder
+  const texts = parts.filter(p => p && (p.kind === "text" || (!p.kind && p.text))).map(p => p.text || "");
+  const a2ui = parts.filter(p => p && p.kind === "a2ui" && p.data).map(p => p.data);
+
+  const textStr = texts.join("\n").trim();
+  if (textStr) b.appendChild(el("div", null, textStr));
+
+  if (a2ui.length) {
+    b.classList.add("rich");
+    if (!renderSurface(a2ui, b)) b.appendChild(el("div", null, flattenText(a2ui) || "(no card content)"));
+  }
+  if (!b.childNodes.length) b.textContent = "(no response)";
+  log.scrollTop = log.scrollHeight;
+}
+
+// The proxy returns { parts: [{kind:"text",text} | {kind:"a2ui",data}] }.
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const rawQuery = input.value.trim();
+  
+  // Collect active filters
+  const activeFilters = [];
+  const diet = document.getElementById("filter-diet").value;
+  const allergy = document.getElementById("filter-allergy").value;
+  const time = document.getElementById("filter-time").value;
+  const difficulty = document.getElementById("filter-difficulty").value;
+  const meal = document.getElementById("filter-meal").value;
+  const cuisine = document.getElementById("filter-cuisine").value;
+  const fun = document.getElementById("filter-fun").value;
+
+  if (diet) activeFilters.push(`Diet: ${diet}`);
+  if (allergy) activeFilters.push(`Allergy restriction: ${allergy}`);
+  if (time) activeFilters.push(`Time: ${time}`);
+  if (difficulty) activeFilters.push(`Difficulty: ${difficulty}`);
+  if (meal) activeFilters.push(`Meal type: ${meal}`);
+  if (cuisine) activeFilters.push(`Cuisine: ${cuisine}`);
+  if (fun) activeFilters.push(`Theme/Vibe: ${fun}`);
+
+  if (!rawQuery && activeFilters.length === 0) return;
+
+  let fullPrompt = rawQuery;
+  let displayQuery = rawQuery;
+
+  if (activeFilters.length > 0) {
+    const filterText = `[Filters applied: ${activeFilters.join(", ")}]`;
+    fullPrompt = rawQuery ? `${rawQuery} (${filterText})` : `Suggest recipe ideas with ${filterText}`;
+    displayQuery = rawQuery ? `${rawQuery} \n🏷️ ${activeFilters.join(" • ")}` : `🏷️ ${activeFilters.join(" • ")}`;
+  }
+
+  bubble("user").textContent = displayQuery;
+  input.value = "";
+  const b = bubble("agent"); b.textContent = "…";
+  try {
+    const res = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: fullPrompt }) });
+    // Read as text first, then parse. If the proxy ever returns a non-JSON error
+    // page (e.g. a plain "Internal Server Error"), show that body instead of a
+    // cryptic "Unexpected token" JSON error.
+    const raw = await res.text();
+    let data;
+    try { data = JSON.parse(raw); }
+    catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}). ${raw.slice(0, 300)}`); }
+    renderReply(b, data.parts || []);
+  } catch (e) {
+    b.textContent = "Error: " + e.message;
+  }
+});
+</script>
+</body>
+</html>
